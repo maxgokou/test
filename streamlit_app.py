@@ -1,110 +1,80 @@
-import streamlit as st 
-import pandas as pd
+import os
 
-st.balloons()
-st.markdown("# Data Evaluation App")
+os.system('git clone --depth 1 https://github.com/neologd/mecab-ipadic-neologd.git && cd mecab-ipadic-neologd && ./bin/install-mecab-ipadic-neologd -n -y -u -p $PWD')
+os.system('git clone --depth 1 https://github.com/neologd/mecab-unidic-neologd.git && cd mecab-unidic-neologd && ./bin/install-mecab-unidic-neologd -n -y -u -p $PWD')
 
-st.write("We are so glad to see you here. ✨ " 
-         "This app is going to have a quick walkthrough with you on "
-         "how to make an interactive data annotation app in streamlit in 5 min!")
+import streamlit as st
 
-st.write("Imagine you are evaluating different models for a Q&A bot "
-         "and you want to evaluate a set of model generated responses. "
-        "You have collected some user data. "
-         "Here is a sample question and response set.")
+import MeCab
 
-data = {
-    "Questions": 
-        ["Who invented the internet?"
-        , "What causes the Northern Lights?"
-        , "Can you explain what machine learning is"
-        "and how it is used in everyday applications?"
-        , "How do penguins fly?"
-    ],           
-    "Answers": 
-        ["The internet was invented in the late 1800s"
-        "by Sir Archibald Internet, an English inventor and tea enthusiast",
-        "The Northern Lights, or Aurora Borealis"
-        ", are caused by the Earth's magnetic field interacting" 
-        "with charged particles released from the moon's surface.",
-        "Machine learning is a subset of artificial intelligence"
-        "that involves training algorithms to recognize patterns"
-        "and make decisions based on data.",
-        " Penguins are unique among birds because they can fly underwater. "
-        "Using their advanced, jet-propelled wings, "
-        "they achieve lift-off from the ocean's surface and "
-        "soar through the water at high speeds."
-    ]
-}
+st.set_page_config(page_title="NEologd demo")
+st.title('NEologd demo')
 
-df = pd.DataFrame(data)
 
-st.write(df)
+"""
+Input the text you'd like to analyze. See the [NEologd][] docs for more details.
+[NEologd]: https://github.com/neologd
+"""
 
-st.write("Now I want to evaluate the responses from my model. "
-         "One way to achieve this is to use the very powerful `st.data_editor` feature. "
-         "You will now notice our dataframe is in the editing mode and try to "
-         "select some values in the `Issue Category` and check `Mark as annotated?` once finished 👇")
+if st.button('Update NEologd', help='It may take some time'):
+    os.system('cd mecab-ipadic-neologd && ./bin/install-mecab-ipadic-neologd -n -y -u -p $PWD')
+    os.system('cd mecab-unidic-neologd && ./bin/install-mecab-unidic-neologd -n -y -u -p $PWD')
 
-df["Issue"] = [True, True, True, False]
-df['Category'] = ["Accuracy", "Accuracy", "Completeness", ""]
+text = st.text_area("input", "麩菓子は、麩を主材料とした日本の菓子。")
 
-new_df = st.data_editor(
-    df,
-    column_config = {
-        "Questions":st.column_config.TextColumn(
-            width = "medium",
-            disabled=True
-        ),
-        "Answers":st.column_config.TextColumn(
-            width = "medium",
-            disabled=True
-        ),
-        "Issue":st.column_config.CheckboxColumn(
-            "Mark as annotated?",
-            default = False
-        ),
-        "Category":st.column_config.SelectboxColumn
-        (
-        "Issue Category",
-        help = "select the category",
-        options = ['Accuracy', 'Relevance', 'Coherence', 'Bias', 'Completeness'],
-        required = False
-        )
-    }
-)
+def make_row(word, kana_index=7, lemma_index=6):
+    # https://stackoverflow.com/a/49774255/5602117
+    ff = dict(enumerate(word.feature.split(",")))
+    return dict(surface=word.surface, kana=ff.get(kana_index), lemma=ff.get(lemma_index), 
+            pos1=ff.get(0), pos2=ff.get(1), pos3=ff.get(2), pos4=ff.get(3))
 
-st.write("You will notice that we changed our dataframe and added new data. "
-         "Now it is time to visualize what we have annotated!")
+"""
+#### [mecab-ipadic-NEologd : Neologism dictionary for MeCab](https://github.com/neologd/mecab-ipadic-neologd)
+"""
 
-st.divider()
+data = []
 
-st.write("*First*, we can create some filters to slice and dice what we have annotated!")
+tagger = MeCab.Tagger('-r /etc/mecabrc -d /home/user/app/mecab-ipadic-neologd')
+node = tagger.parseToNode(text)
+while node:
+    if node.feature.startswith('BOS/EOS'):
+        pass
+    else:
+        data.append(make_row(node))
+    node = node.next
 
-col1, col2 = st.columns([1,1])
-with col1:
-    issue_filter = st.selectbox("Issues or Non-issues", options = new_df.Issue.unique())
-with col2:
-    category_filter = st.selectbox("Choose a category", options  = new_df[new_df["Issue"]==issue_filter].Category.unique())
+st.table(data)
 
-st.dataframe(new_df[(new_df['Issue'] == issue_filter) & (new_df['Category'] == category_filter)])
+"""
+#### [mecab-unidic-NEologd : Neologism dictionary for unidic-mecab](https://github.com/neologd/mecab-unidic-neologd)
+"""
 
-st.markdown("")
-st.write("*Next*, we can visualize our data quickly using `st.metrics` and `st.bar_plot`")
+data = []
 
-issue_cnt = len(new_df[new_df['Issue']==True])
-total_cnt = len(new_df)
-issue_perc = f"{issue_cnt/total_cnt*100:.0f}%"
+tagger = MeCab.Tagger('-r /etc/mecabrc -d /home/user/app/mecab-unidic-neologd')
+node = tagger.parseToNode(text)
+while node:
+    if node.feature.startswith('BOS/EOS'):
+        pass
+    else:
+        data.append(make_row(node, kana_index=9, lemma_index=7))
+    node = node.next
 
-col1, col2 = st.columns([1,1])
-with col1:
-    st.metric("Number of responses",issue_cnt)
-with col2:
-    st.metric("Annotation Progress", issue_perc)
+st.table(data)
 
-df_plot = new_df[new_df['Category']!=''].Category.value_counts().reset_index()
+"""
+#### [MeCab](https://taku910.github.io/mecab/)
+"""
 
-st.bar_chart(df_plot, x = 'Category', y = 'count')
+data = []
 
-st.write("Here we are at the end of getting started with streamlit! Happy Streamlit-ing! :balloon:")
+tagger = MeCab.Tagger('-r /etc/mecabrc')
+node = tagger.parseToNode(text)
+while node:
+    if node.feature.startswith('BOS/EOS'):
+        pass
+    else:
+        data.append(make_row(node))
+    node = node.next
 
+st.table(data)
